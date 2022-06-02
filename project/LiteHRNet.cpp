@@ -68,7 +68,7 @@ void doInference(IExecutionContext& context, float* input, float* output, int ba
 
 	// DMA input batch data to device, infer on the batch asynchronously, and DMA output back to host
 	CHECK(cudaMemcpyAsync(buffers[inputIndex], input, batchSize * 3 * INPUT_H * INPUT_W * sizeof(float), cudaMemcpyHostToDevice, stream));
-	context.setBindingDimensions(0, Dims4(1,3, 384, 288));
+	context.setBindingDimensions(0, Dims4(batchSize,3, 384, 288));
 	context.enqueueV2(buffers, stream, nullptr);
 	CHECK(cudaMemcpyAsync(output, buffers[outputIndex], batchSize * OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost, stream));
 	cudaStreamSynchronize(stream);
@@ -255,13 +255,16 @@ int main()
 	int t = engine->getMaxBatchSize();
 	IExecutionContext* context = engine->createExecutionContext();
 	assert(context != nullptr);
+	
 
 
 
 	Mat srcImg = imread("3.jpg");
+	Mat srcImg2= imread("1.jpg");
 
 	auto begin = std::chrono::high_resolution_clock::now();
 	Mat inputImg = letter_box_image(srcImg, INPUT_W,INPUT_H);
+	Mat inputImg2 = letter_box_image(srcImg2, INPUT_W, INPUT_H);
 	//cvtColor(inputImg, inputImg, COLOR_BGR2RGB);
 	
 	int singleInputSize = 3 * INPUT_W*INPUT_H;
@@ -283,7 +286,7 @@ int main()
 	auto end = std::chrono::high_resolution_clock::now();
 	std::cout << "batch size: " << batchSize<<", infer time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" <<std::endl;
 
-
+	Dims dms = context->getBindingDimensions(0);
 	for (int i = 0; i < batchSize; i++)
 	{
 		float* pred = new float[17 * 3];
@@ -321,7 +324,7 @@ int main()
 	runtime->destroy();
 	delete singleInput;
 	delete batchInput;
-	delete output;
+	delete batchOutput;
 	
 
 	return 0;
