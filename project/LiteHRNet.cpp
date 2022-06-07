@@ -252,6 +252,7 @@ int main()
 	assert(runtime != nullptr);
 	ICudaEngine* engine = runtime->deserializeCudaEngine(trtModelStream, size, nullptr);
 	assert(engine != nullptr);
+	delete[] trtModelStream;
 	int t = engine->getMaxBatchSize();
 	IExecutionContext* context = engine->createExecutionContext();
 	assert(context != nullptr);
@@ -303,7 +304,7 @@ int main()
 		//string outName = "out"+to_string(i) + ".jpg";
 		//imwrite(outName, inputImg);
 
-		delete pred;
+		delete[] pred;
 	}
 	
 
@@ -322,9 +323,9 @@ int main()
 	context->destroy();
 	engine->destroy();
 	runtime->destroy();
-	delete singleInput;
-	delete batchInput;
-	delete batchOutput;
+	delete[] singleInput;
+	delete[] batchInput;
+	delete[] batchOutput;
 	
 
 	return 0;
