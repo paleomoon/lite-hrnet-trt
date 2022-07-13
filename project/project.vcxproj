@@ -128,10 +128,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="LiteHRNet.cpp" />
-    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="LiteHRNet.h" />
     <ClInclude Include="logging.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

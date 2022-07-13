@@ -15,17 +15,11 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="LiteHRNet.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="LiteHRNet.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="logging.h">
       <Filter>头文件</Filter>
     </ClInclude>

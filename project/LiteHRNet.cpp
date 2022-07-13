@@ -1,13 +1,10 @@
-﻿
-
+﻿#include <fstream>
+#include <map>
+#include <chrono>
 #include "NvInfer.h"
 #include "cuda_runtime_api.h"
 #include "logging.h"
-#include <fstream>
-#include <map>
-#include <chrono>
 #include "opencv2/opencv.hpp"
-#include "LiteHRNet.h"
 
 #define CHECK(status) \
     do\
@@ -24,17 +21,18 @@
 static const int INPUT_H = 384;
 static const int INPUT_W = 288;
 static const int OUTPUT_SIZE = 17 * 96 * 72;
-const int batchSize = 64;
-
-//const char* INPUT_BLOB_NAME = "input.1";
-//const char* OUTPUT_BLOB_NAME = "9191";
+//const int batchSize = 64;
 
 const char* INPUT_BLOB_NAME = "image";
 const char* OUTPUT_BLOB_NAME = "heatmap";
 
-
 const float meanVal[3] = { 0.485, 0.456, 0.406 };//RGB
 const float stdVal[3] = { 0.229, 0.224, 0.225 };
+
+static const int joint_pairs[16][2] = {
+	{0, 1}, {1, 3}, {0, 2}, {2, 4}, {5, 6}, {5, 7}, {7, 9}, {6, 8}, {8, 10}, {5, 11}, {6, 12}, {11, 12}, {11, 13}, {12, 14}, {13, 15}, {14, 16}
+};
+
 
 using namespace cv;
 using namespace std;
@@ -42,7 +40,12 @@ using namespace nvinfer1;
 
 static Logger gLogger;
 
-
+template <class F>
+struct _LoopBody : public cv::ParallelLoopBody {
+	F f_;
+	_LoopBody(F f) : f_(std::move(f)) {}
+	void operator()(const cv::Range& range) const override { f_(range); }
+};
 
 void doInference(IExecutionContext& context, float* input, float* output, int batchSize) 
 {
@@ -68,7 +71,7 @@ void doInference(IExecutionContext& context, float* input, float* output, int ba
 
 	// DMA input batch data to device, infer on the batch asynchronously, and DMA output back to host
 	CHECK(cudaMemcpyAsync(buffers[inputIndex], input, batchSize * 3 * INPUT_H * INPUT_W * sizeof(float), cudaMemcpyHostToDevice, stream));
-	context.setBindingDimensions(0, Dims4(batchSize,3, 384, 288));
+	context.setBindingDimensions(inputIndex, Dims4(batchSize,3, INPUT_H, INPUT_W));
 	context.enqueueV2(buffers, stream, nullptr);
 	CHECK(cudaMemcpyAsync(output, buffers[outputIndex], batchSize * OUTPUT_SIZE * sizeof(float), cudaMemcpyDeviceToHost, stream));
 	cudaStreamSynchronize(stream);
@@ -79,7 +82,7 @@ void doInference(IExecutionContext& context, float* input, float* output, int ba
 	CHECK(cudaFree(buffers[outputIndex]));
 }
 
-static cv::Mat letter_box_image(const cv::Mat &src, int net_w, int net_h)
+cv::Mat letterBox(const cv::Mat &src, int net_w, int net_h)
 {
 	int new_w = src.cols;
 	int new_h = src.rows;
@@ -95,17 +98,28 @@ static cv::Mat letter_box_image(const cv::Mat &src, int net_w, int net_h)
 		new_w = (src.cols * net_h) / src.rows;
 	}
 
-	cv::Mat dest(net_h, net_w, CV_8UC3, cv::Scalar(128, 128, 128));
+	cv::Mat dest(net_h, net_w, CV_8UC3, cv::Scalar(114, 114, 114));
 	cv::Mat embed;
 	cv::resize(src, embed, cv::Size(new_w, new_h), 0, 0, cv::INTER_LINEAR);
 	cv::Mat imageROI = dest(cv::Rect((net_w - new_w) / 2, (net_h - new_h) / 2,
 		embed.cols, embed.rows));
 	embed.copyTo(imageROI);
-
 	return dest;
 }
 
+//transform point from input to source image
+void scaleCoords(int img1w, int img1h, int img0w, int img0h, cv::Point& p)
+{
+	float gain = std::min((float)img1h / img0h, (float)img1w / img0w);
+	int padw = (img1w - img0w * gain) / 2;
+	int padh = (img1h - img0h * gain) / 2;
 
+	p.x = (p.x - padw) / gain;
+	p.y = (p.y - padh) / gain;
+	//clip
+	p.x = std::max(std::min(p.x, img0w), 0);
+	p.y = std::max(std::min(p.y, img0h), 0);
+}
 
 void normalize(cv::Mat& img,float* data) {
 	for (int i = 0; i < img.rows; ++i) {
@@ -118,13 +132,6 @@ void normalize(cv::Mat& img,float* data) {
 		}
 	}
 }
-
-template <class F>
-struct _LoopBody : public cv::ParallelLoopBody {
-	F f_;
-	_LoopBody(F f) : f_(std::move(f)) {}
-	void operator()(const cv::Range& range) const override { f_(range); }
-};
 
 /*
 get max value and coordinate in single heatmap
@@ -154,7 +161,6 @@ void get_max_pred(float* heatmap, const vector<int>& shape, float* pred) {
 						  }
 						}
 					  } ));
-
 }
 
 /*
@@ -211,75 +217,58 @@ void keypoints_from_heatmap(float* heatmap,const vector<int>& shape, const vecto
 	}
 }
 
-int joint_pairs[] = {
-	0,1,
-	1,3,
-	0,2,
-	2,4,
-	5,6,
-	5,7,
-	7,9,
-	6,8,
-	8,10,
-	5,11,
-	6,12,
-	11,12,
-	11,13,
-	12,14,
-	13,15,
-	14,16
-};
-
 int main()
 {
+	string engineFile = "lite-hrnet//litehrnet_30_coco_384x288-dynamic.trt";
 
-	//string engineFile = "D://hj//action-recognition//pose-estimation//lite-hrnet//litehrnet_30_coco_384x288.trt";
-	string engineFile = "D://hj//action-recognition//pose-estimation//lite-hrnet//litehrnet_30_coco_384x288-dynamic.trt";
-
-	char *trtModelStream{ nullptr };
-	size_t size{ 0 };
 	std::ifstream file(engineFile, std::ios::binary);
-	if (file.good()) {
-		file.seekg(0, file.end);
-		size = file.tellg();
-		file.seekg(0, file.beg);
-		trtModelStream = new char[size];
-		assert(trtModelStream);
-		file.read(trtModelStream, size);
-		file.close();
+	if (!file.good()) {
+		std::cerr << "read " << engineFile << " error!" << std::endl;
+		return 0;
 	}
+	char *trtModelStream = nullptr;
+	size_t size = 0;
+	file.seekg(0, file.end);
+	size = file.tellg();
+	file.seekg(0, file.beg);
+	trtModelStream = new char[size];
+	assert(trtModelStream);
+	file.read(trtModelStream, size);
+	file.close();
+
 	IRuntime* runtime = createInferRuntime(gLogger);
 	assert(runtime != nullptr);
 	ICudaEngine* engine = runtime->deserializeCudaEngine(trtModelStream, size, nullptr);
 	assert(engine != nullptr);
-	delete[] trtModelStream;
-	int t = engine->getMaxBatchSize();
 	IExecutionContext* context = engine->createExecutionContext();
 	assert(context != nullptr);
+	if (trtModelStream != nullptr)
+		delete[] trtModelStream;
+
+	vector<Mat> images;
+	Mat srcImg1 = imread("1.jpg");
+	Mat srcImg2 = imread("2.jpg");
+	Mat srcImg3 = imread("3.jpg");
+	images.push_back(srcImg1);
+	images.push_back(srcImg2);
+	images.push_back(srcImg3);
+	for (int i = 0; i < 61; i++)
+	{
+		Mat srcImgi = imread("2.jpg");
+		images.push_back(srcImgi);
+	}
 	
-
-
-
-	Mat srcImg = imread("3.jpg");
-	Mat srcImg2= imread("1.jpg");
-
-	auto begin = std::chrono::high_resolution_clock::now();
-	Mat inputImg = letter_box_image(srcImg, INPUT_W,INPUT_H);
-	Mat inputImg2 = letter_box_image(srcImg2, INPUT_W, INPUT_H);
-	//cvtColor(inputImg, inputImg, COLOR_BGR2RGB);
-	
+	int batchSize = images.size();
 	int singleInputSize = 3 * INPUT_W*INPUT_H;
-	float* singleInput=new float[singleInputSize];
-	normalize(inputImg, singleInput);
 	float * batchInput= new float[batchSize*singleInputSize];
 	for (int i = 0; i < batchSize; i++)
 	{
-		memcpy(batchInput + i * singleInputSize, singleInput, singleInputSize*sizeof(float));
+		Mat inputImg = letterBox(images[i], INPUT_W, INPUT_H);
+		normalize(inputImg, batchInput + i * singleInputSize);
 	}
 
 	float* batchOutput=new float[batchSize*OUTPUT_SIZE];
 	doInference(*context, batchInput, batchOutput, batchSize);//warmup
-
 	auto start = std::chrono::high_resolution_clock::now();
 
 	doInference(*context, batchInput, batchOutput, batchSize);
@@ -287,46 +276,36 @@ int main()
 	auto end = std::chrono::high_resolution_clock::now();
 	std::cout << "batch size: " << batchSize<<", infer time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" <<std::endl;
 
-	Dims dms = context->getBindingDimensions(0);
+	float* pred = new float[17 * 3];
+	vector<int> shape = { 1,17,96,72 };
 	for (int i = 0; i < batchSize; i++)
 	{
-		float* pred = new float[17 * 3];
-		vector<int> shape = { 1,17,96,72 };
 		vector<float> center = { (float)INPUT_W / 2,(float)INPUT_H / 2 };
 		vector<float> scale = { (float)INPUT_W,(float)INPUT_H };
 		keypoints_from_heatmap(batchOutput +i* OUTPUT_SIZE, shape, center, scale, pred);
 
-		//const auto color = Scalar(0, 0, 255);
-		//for (int i = 0; i < 17; i++)
-		//{
-		//	cv::circle(inputImg, cv::Point2f(*(pred + i * 3), *(pred + i * 3 + 1)), 2, color, 2);
-		//}
-		//string outName = "out"+to_string(i) + ".jpg";
-		//imwrite(outName, inputImg);
-
-		delete[] pred;
+		vector<Point> keyPoints;
+		for (int j = 0; j < 17; j++)
+		{
+			cv::Point p = cv::Point(*(pred + j * 3), *(pred + j * 3 + 1));
+			scaleCoords(INPUT_W, INPUT_H, images[i].cols, images[i].rows, p);
+			keyPoints.push_back(p);
+			cv::circle(images[i], p, 3, cv::Scalar(0, 255, 0),3);
+		}
+		for (int j = 0; j < 16; j++)
+		{
+			cv::line(images[i], keyPoints[joint_pairs[j][0]], keyPoints[joint_pairs[j][1]], cv::Scalar(255, 0, 255),2);
+		}
+		string outName = "images/out"+to_string(i) + ".jpg";
+		imwrite(outName, images[i]);
 	}
-	
-
-	auto stop = std::chrono::high_resolution_clock::now();
-	std::cout << "total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop - begin).count() << "ms" << std::endl;
-
-
-	//for (int i = 0; i < 16; i++)
-	//{
-	//	cv::Point2f p1(*(pred + i * 3), *(pred + i * 3 + 1));
-	//}
-	
-	
-
+	delete[] pred;
+	delete[] batchInput;
+	delete[] batchOutput;
 	// Destroy the engine
 	context->destroy();
 	engine->destroy();
 	runtime->destroy();
-	delete[] singleInput;
-	delete[] batchInput;
-	delete[] batchOutput;
-	
 
 	return 0;
 }
