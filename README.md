@@ -1,4 +1,4 @@
-
+## Deploy Lite-HRNet with TensorRT and C++.
 
 Use [mmpose](https://github.com/open-mmlab/mmpose) instead of [Lite-HRNet](https://github.com/HRNet/Lite-HRNet).
 
@@ -27,6 +27,12 @@ Use [mmpose](https://github.com/open-mmlab/mmpose) instead of [Lite-HRNet](https
 ```
 python tools/deployment/pytorch2onnx.py configs/body/2d_kpt_sview_rgb_img/topdown_heatmap/coco/litehrnet_30_coco_384x288.py litehrnet30_coco_384x288-a3aef5c4_20210626.pth --output-file litehrnet_30_coco_384x288-dynamic.onnx --verify --shape 1 3 384 288
 ```
+
+If get error like: 
+
+> RuntimeError: Failed to export an ONNX attribute 'onnx::Gather', since it's not constant, please try to make things (e.g., kernel size) static if possible
+
+change [this line](https://github.com/open-mmlab/mmpose/blob/afb37d4ce74a2df32a68c3e66a4411e515de423f/mmpose/models/backbones/litehrnet.py#L118) to `mini_size = [int(v) for v in mini_size]` may resolve this.
 
 4. Simplify ONNX model:
 
