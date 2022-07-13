@@ -278,10 +278,10 @@ int main()
 
 	float* pred = new float[17 * 3];
 	vector<int> shape = { 1,17,96,72 };
+	vector<float> center = { (float)INPUT_W / 2,(float)INPUT_H / 2 };
+	vector<float> scale = { (float)INPUT_W,(float)INPUT_H };
 	for (int i = 0; i < batchSize; i++)
 	{
-		vector<float> center = { (float)INPUT_W / 2,(float)INPUT_H / 2 };
-		vector<float> scale = { (float)INPUT_W,(float)INPUT_H };
 		keypoints_from_heatmap(batchOutput +i* OUTPUT_SIZE, shape, center, scale, pred);
 
 		vector<Point> keyPoints;

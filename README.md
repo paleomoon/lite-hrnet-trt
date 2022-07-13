@@ -46,6 +46,6 @@ python -m onnxsim litehrnet_30_coco_384x288-dynamic.onnx litehrnet_30_coco_384x2
 trtexec.exe --onnx=litehrnet_30_coco_384x288-dynamic-sim.onnx --saveEngine=litehrnet_30_coco_384x288-dynamic.trt --explicitBatch --minShapes=image:1x3x384x288  --optShapes=image:16x3x384x288  --maxShapes=image:64x3x384x288 --shapes=image:16x3x384x288 --workspace=1024
 ```
 
-6. Run engine file with this project and get results below, it takes around 950ms with batch=64 on GTX 1050 Ti GPU, not as much fast as I think.
+6. Run engine file with this project and get results below, it takes around 950ms with batch=64 on GTX 1050 Ti GPU.
 
    ![](image/out0.jpg)
