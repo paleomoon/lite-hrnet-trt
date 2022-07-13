@@ -5,13 +5,13 @@
 
 *.dll
 *.lib
-!*hyperpose.lib
 *.trt
 *.uff
 *.mp4
 *.json
 *.jpg
 *.trt
+!image/*.jpg
 
 # User-specific files
 *.rsuser
