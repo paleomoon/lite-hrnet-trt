@@ -11,7 +11,7 @@ include_directories("D:/software/TensorRT-7.2.2.3/include" "C:/Program Files/NVI
 
 add_executable(${PROJECT_NAME} src/LiteHRNet.cpp)
 
-file(GLOB trt-libs "D:/software/TensorRT-7.2.2.3/lib/*.lib")
-file(GLOB cuda-libs "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v10.2/lib/x64/*.lib")
+file(GLOB TRT_LIBS "D:/software/TensorRT-7.2.2.3/lib/*.lib")
+file(GLOB CUDA_LIBS "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v10.2/lib/x64/*.lib")
 
-target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} ${trt-libs} ${cuda-libs})
+target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} ${TRT_LIBS} ${CUDA_LIBS})
