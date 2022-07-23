@@ -40,13 +40,6 @@ using namespace nvinfer1;
 
 static Logger gLogger;
 
-template <class F>
-struct _LoopBody : public cv::ParallelLoopBody {
-	F f_;
-	_LoopBody(F f) : f_(std::move(f)) {}
-	void operator()(const cv::Range& range) const override { f_(range); }
-};
-
 void doInference(IExecutionContext& context, float* input, float* output, int batchSize) 
 {
 	const ICudaEngine& engine = context.getEngine();
@@ -137,30 +130,30 @@ void normalize(cv::Mat& img,float* data) {
 get max value and coordinate in single heatmap
 heatmap: single batch [1,K,H,W]
 shape: [1,K,H,W]
-pred: K*3, 3 means x,y,score 
+pred: K*3, 3 means x,y,score
 */
 void get_max_pred(float* heatmap, const vector<int>& shape, float* pred) {
 	//int batch_size = shape[0];
 	int num_joints = shape[1];
 	int H = shape[2];
 	int W = shape[3];
-	cv::parallel_for_(cv::Range(0, num_joints), _LoopBody<std::function<void(const cv::Range&)>>( [&](const cv::Range& r) {
-						for (int i = r.start; i < r.end; i++) {
-						  float* src_data = heatmap+ i * H * W;
-						  cv::Mat mat = cv::Mat(H, W, CV_32FC1, src_data);
-						  double min_val, max_val;
-						  cv::Point min_loc, max_loc;
-						  cv::minMaxLoc(mat, &min_val, &max_val, &min_loc, &max_loc);
-						  float* dst_data = pred + i * 3;
-						  *(dst_data + 0) = -1;
-						  *(dst_data + 1) = -1;
-						  *(dst_data + 2) = max_val;
-						  if (max_val > 0.0) {
-							*(dst_data + 0) = max_loc.x;
-							*(dst_data + 1) = max_loc.y;
-						  }
-						}
-					  } ));
+	cv::parallel_for_(cv::Range(0, num_joints), [&](const cv::Range& r) {
+		for (int i = r.start; i < r.end; i++) {
+			float* src_data = heatmap + i * H * W;
+			cv::Mat mat = cv::Mat(H, W, CV_32FC1, src_data);
+			double min_val, max_val;
+			cv::Point min_loc, max_loc;
+			cv::minMaxLoc(mat, &min_val, &max_val, &min_loc, &max_loc);
+			float* dst_data = pred + i * 3;
+			*(dst_data + 0) = -1;
+			*(dst_data + 1) = -1;
+			*(dst_data + 2) = max_val;
+			if (max_val > 0.0) {
+				*(dst_data + 0) = max_loc.x;
+				*(dst_data + 1) = max_loc.y;
+			}
+		}
+	});
 }
 
 /*
