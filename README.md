@@ -9,6 +9,7 @@ Environment:
 - onnx                      1.12.0
 - python                    3.9.7
 - pytorch                   1.8.0
+- onnxsim                   0.4.10
 
 1. Modify mmpose/tools/deployment/pytorch2onnx.py to support dynamic batch:
 
@@ -51,7 +52,7 @@ just try PyTorch==1.8.0.
 4. Simplify ONNX model:
 
 ```
-python -m onnxsim litehrnet_30_coco_384x288-dynamic.onnx litehrnet_30_coco_384x288-dynamic-sim.onnx 2 --dynamic-input-shape --input-shape image:1,3,384,288
+python -m onnxsim litehrnet_30_coco_384x288-dynamic.onnx litehrnet_30_coco_384x288-dynamic-sim.onnx 2 --test-input-shape image:1,3,384,288
 ```
 
 5. Serialize TensorRT engine:
