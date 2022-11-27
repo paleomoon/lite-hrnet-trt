@@ -2,6 +2,14 @@
 
 Use [mmpose](https://github.com/open-mmlab/mmpose) instead of [Lite-HRNet](https://github.com/HRNet/Lite-HRNet).
 
+Environment:
+
+- mmcv-full                 1.7.0
+- mmpose                    0.29.0
+- onnx                      1.12.0
+- python                    3.9.7
+- pytorch                   1.8.0
+
 1. Modify mmpose/tools/deployment/pytorch2onnx.py to support dynamic batch:
 
 ```
@@ -32,7 +40,13 @@ If get error like:
 
 > RuntimeError: Failed to export an ONNX attribute 'onnx::Gather', since it's not constant, please try to make things (e.g., kernel size) static if possible
 
-change [this line](https://github.com/open-mmlab/mmpose/blob/afb37d4ce74a2df32a68c3e66a4411e515de423f/mmpose/models/backbones/litehrnet.py#L118) to `mini_size = [int(v) for v in mini_size]` may resolve this.
+add `mini_size = [int(v) for v in mini_size]` after [this line](https://github.com/open-mmlab/mmpose/blob/afb37d4ce74a2df32a68c3e66a4411e515de423f/mmpose/models/backbones/litehrnet.py#L118) to  may resolve this.
+
+If get error:
+
+> NotImplementedError: [Adaptive pool]:input size not accessible
+
+just try PyTorch==1.8.0.
 
 4. Simplify ONNX model:
 
